@@ -1,4 +1,4 @@
-package main
+package app
 
 const IconBase64 = `iVBORw0KGgoAAAANSUhEUgAAAFAAAABSCAYAAADD2VOmAAAQAElEQVR4AeyaB5wUVdb2/xU69+TA
 wAxhECSjIijiKmKO67IqYMLVfWFdAyqKiqBgxCwGVkEML0Zw0TVhRpAkIjkOYZicema6ezrH+k7P

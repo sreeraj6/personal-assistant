@@ -1,13 +1,12 @@
 #!/bin/bash
-# Install Me Tracker desktop entry and autostart entry
-set -e
+# Install the Activities launcher; systemd owns autostart.
+set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXEC_PATH="$APP_DIR/metracker"
 ICON_PATH="$APP_DIR/icon.png"
 
 mkdir -p "$HOME/.local/share/applications"
-mkdir -p "$HOME/.config/autostart"
 
 cat > "$HOME/.local/share/applications/metracker.desktop" <<EOF
 [Desktop Entry]
@@ -21,12 +20,10 @@ Categories=Utility;Office;
 StartupNotify=false
 EOF
 
-cp "$HOME/.local/share/applications/metracker.desktop" "$HOME/.config/autostart/metracker.desktop"
 
 echo "Me Tracker installed."
 echo "  Launcher: $HOME/.local/share/applications/metracker.desktop"
-echo "  Autostart: $HOME/.config/autostart/metracker.desktop"
 echo ""
 echo "You can now:"
 echo "  - Search 'Me Tracker' in Activities to launch it"
-echo "  - It will start automatically on next login"
+echo "  - Run ./install-service.sh to enable autostart"

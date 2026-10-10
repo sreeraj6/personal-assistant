@@ -33,3 +33,13 @@ Thumbs.db
 # Tracker data
 .metracker/
 me_tracker.xlsx
+
+# Google authorization (runtime files must never be committed)
+google-credentials.json
+google-token.json
+client_secret*.json
+credentials.json
+
+# Python GTK validation cache
+__pycache__/
+*.pyc

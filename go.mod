@@ -1,6 +1,6 @@
 module metracker
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/getlantern/systray v1.2.2
@@ -8,6 +8,8 @@ require (
 	github.com/ncruces/zenity v0.10.15
 	github.com/xuri/excelize/v2 v2.11.0
 	golang.org/x/image v0.45.0
+	golang.org/x/oauth2 v0.37.0
+	golang.org/x/sys v0.47.0
 )
 
 require (
@@ -34,6 +36,5 @@ require (
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )

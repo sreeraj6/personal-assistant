@@ -7,11 +7,12 @@ import (
 	"image"
 	"image/color"
 	_ "image/png"
+	"log"
 	"math"
 	"math/rand"
+	"metracker/internal/config"
 	"os"
-	"path/filepath"
-	"time"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -140,12 +141,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return winWidth, winHeight
 }
 
-var startTime time.Time
-
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	startTime = time.Now()
-
 	ebiten.SetScreenTransparent(true)
 	ebiten.SetWindowDecorated(false)
 	ebiten.SetWindowFloating(true)
@@ -161,28 +157,30 @@ func main() {
 
 // notifyMainApp writes a trigger file that the main metracker app watches for.
 func notifyMainApp() {
-	home, err := os.UserHomeDir()
+	paths, err := config.UserPaths()
 	if err != nil {
+		log.Printf("locate tracker: %v", err)
 		return
 	}
-	trigger := filepath.Join(home, ".metracker", "add-entry.trigger")
-	_ = os.WriteFile(trigger, []byte("click\n"), 0644)
+	if err := os.WriteFile(paths.Trigger, []byte("click\n"), 0600); err != nil {
+		log.Printf("notify tracker: %v", err)
+	}
 }
 
 func drawWrappedText(dst *ebiten.Image, s string, f font.Face, x, y, width int, c color.Color) {
-	words := splitWords(s)
+	words := strings.Fields(s)
 	lineHeight := f.Metrics().Height.Ceil() + 2
 	line := ""
 	py := y
 	for _, w := range words {
-		test := line + w + " "
-		if line == "" {
-			test = w
+		test := w
+		if line != "" {
+			test = line + " " + w
 		}
 		bw := font.MeasureString(f, test).Ceil()
 		if bw > width && line != "" {
 			text.Draw(dst, line, f, x, py, c)
-			line = w + " "
+			line = w
 			py += lineHeight
 		} else {
 			line = test
@@ -191,23 +189,4 @@ func drawWrappedText(dst *ebiten.Image, s string, f font.Face, x, y, width int, 
 	if line != "" {
 		text.Draw(dst, line, f, x, py, c)
 	}
-}
-
-func splitWords(s string) []string {
-	var out []string
-	w := ""
-	for _, r := range s {
-		if r == ' ' {
-			if w != "" {
-				out = append(out, w)
-				w = ""
-			}
-		} else {
-			w += string(r)
-		}
-	}
-	if w != "" {
-		out = append(out, w)
-	}
-	return out
 }

@@ -1,182 +1,194 @@
 # Me Tracker
 
-A tiny Go system-tray app for Ubuntu to quickly log what you do each day. Each day gets its own sheet in an Excel workbook, structured so you can analyze how much you work and which roles/categories you focus on.
+A Go desktop activity tracker for Ubuntu. Log your category, minutes, and activity from the system tray. Entries are stored in an Excel workbook with one sheet per day. Iron Man reminds you every **30 minutes**; clicking him opens the native activity form.
 
-And yes — **Iron Man** flies across your screen every 30 minutes to remind you. 🦾
+## Current behavior
 
-## Features
+- **Open Me Tracker** opens a small native GTK3 window.
+- **Log Activity...** opens its single form for category, duration, and activity.
+- The panel shows today's entries, a live reminder countdown, and Google upload status.
+- **Iron Man Reminder** triggers the overlay manually.
+- **View Today** opens the native Today view. **Open Workbook** opens LibreOffice.
+- **Open Folder** opens the tracker data directory.
+- Ignored reminders hover until clicked. Only one reminder runs at a time.
+- Quit cancels background timers, dialogs, and the reminder process.
+- Only one tracker instance can run for the same user on Linux.
+- Google Sheets sync is optional; Excel saves always work without a connection.
+- **Sync Google Sheets Now** retries queued uploads after setup.
 
-- Lives in the system tray (top bar) for one-click access
-- Click **Add Entry...** → pick a category, enter minutes spent, describe the activity
-- Saves current time, category, duration, and activity
-- Creates/updates `~/.metracker/me_tracker.xlsx` with one sheet per day (`YYYY-MM-DD`)
-- **Iron Man reminder** pops up every 30 minutes with a funny message
-- Click the flying Iron Man and he zooms up and away
-- View today's sheet, open the workbook, or open the tracker folder from the tray menu
-- Starts automatically on login as a systemd user service
+## Project structure
 
-## Files
+```text
+main.go                       Application entry point
+internal/
+  app/                        Tray and background workers
+  nativeui/                   Small GTK3 window and JSON-pipe controller
+  config/                     User paths, category loading, embedded defaults
+  storage/                    Entries, atomic Excel persistence, durable sync outbox
+  googlesync/                 Google sign-in, Sheets API, background retries
+  platform/                   Desktop opening and Linux instance lock
+cmd/ironman/                  Reminder overlay and embedded sprite
+Makefile                      Build, race tests, static checks, formatting
+metracker.service             Graphical-session systemd user service
+install-service.sh            Binary/service installation
+install.desktop.sh            Optional Activities launcher
+```
 
-| File | Purpose |
-|------|---------|
-| `metracker` | Main app binary |
-| `ironman-reminder` | Iron Man fly-by reminder binary |
-| `main.go` | Main app source code |
-| `cmd/ironman/` | Iron Man reminder source + sprite |
-| `icon.go` | Tray icon data |
-| `icon.png` | App icon for the desktop launcher |
-| `metracker.service` | systemd user service template |
-| `install-service.sh` | Installs/enables the systemd service |
-| `install.desktop.sh` | Installs the Activities launcher + autostart |
-| `categories.json` | Default category list (copied to `~/.metracker/` on first run) |
-| `go.mod`, `go.sum` | Go module files |
-| `.gopath/`, `.gocache/` | Local Go module/cache directories |
+The root entry point is retained so `go build .` still works. Storage and configuration can be tested without launching the desktop UI. Google authorization uses the Go OAuth2 library.
 
-## Build
+## Build and verify
+
+The module requires Go **1.26 or newer**; Go may select/download a newer toolchain to satisfy dependencies. Ubuntu build dependencies include GTK, Ayatana AppIndicator, OpenGL, and X11 development libraries. Runtime requires a graphical desktop session, `/usr/bin/python3`, `python3-gi`, `gir1.2-gtk-3.0`, `zenity`, `xdg-open`, and LibreOffice to open the workbook.
 
 ```bash
-cd "/media/sreeraj/UbuntuData/me tracker"
+sudo apt install libgtk-3-dev libayatana-appindicator3-dev libgl1-mesa-dev xorg-dev zenity python3-gi gir1.2-gtk-3.0 libreoffice
+make build
+make check
+```
+
+`make check` runs the Go race detector and `go vet`. To check the actual GTK form using disposable sample data in a graphical session, run `/usr/bin/python3 tests/native_ui_smoke.py`. The Makefile keeps module and build caches in `.gopath/` and `.gocache/`, both ignored by Git.
+
+Without Make:
+
+```bash
 export GOPATH="$PWD/.gopath"
 export GOCACHE="$PWD/.gocache"
 go build -o metracker .
 go build -o ironman-reminder ./cmd/ironman
+go test -race ./...
+go vet ./...
 ```
 
-## Run once (for testing)
+Run `./metracker` from a graphical session. GNOME needs AppIndicator support to display the tray icon. Stop an installed service before running another copy for testing.
 
-```bash
-./metracker
-```
+## Native Linux interface
 
-You will see a blue **"Me"** icon in the system tray.
+A compact native GTK3 popup stays above other windows and opens at the top-right of the primary monitor’s usable desktop area, with a 16-pixel inset. It is about 380 pixels wide, with activity, category, minutes, and Save controls. A small **Today** toggle shows activity details and total logged time. **Ctrl+Enter** saves; **Esc** or **×** closes. The footer shows Google upload status and the reminder countdown. Workbook, folder, reminder, and manual sync actions remain available in the tray. Window placement depends on the desktop compositor; Wayland may control placement itself.
 
-## Install as a service (recommended)
+Open it from **Open Me Tracker**, **Log Activity...**, or **View Today** in the tray. Clicking Iron Man opens the form. The window is created on demand; reopening it focuses the existing window. Closing it exits its UI process while the tray, reminders, and background Google sync continue.
 
-This makes Me Tracker start automatically every time you log in, and restart if it crashes. It also installs the Iron Man reminder binary.
+The form runs using Ubuntu's system Python and GTK packages. No browser, webview, frontend framework, or local dashboard server is used. The UI exchanges JSON through process pipes with the Go backend. No new Go UI dependencies are needed. **Open Workbook** explicitly uses LibreOffice; **Open Folder** uses your desktop file manager.
+
+## Install
+
+Run from your logged-in graphical session after building:
 
 ```bash
 ./install-service.sh
 ```
 
-Check that it's running:
+This copies both binaries to `~/.metracker/`, imports the current display/session environment, and enables a systemd user service for graphical login. It removes the legacy duplicate desktop autostart entry. The script does not modify the workbook or category settings.
 
-```bash
-systemctl --user status metracker
-```
-
-Common service commands:
-
-```bash
-systemctl --user stop metracker      # stop now
-systemctl --user start metracker     # start now
-systemctl --user disable metracker   # disable autostart
-journalctl --user -u metracker -f    # watch logs
-```
-
-## Install Activities launcher + autostart (optional)
-
-If you also want to launch it from Activities:
+Optionally install the Activities launcher:
 
 ```bash
 ./install.desktop.sh
 ```
 
-## How to add an entry
-
-1. Click the tray icon
-2. Choose **Add Entry...**
-3. Select a **category** (e.g. Development, Meetings, Learning)
-4. Enter **minutes spent**
-5. Describe what you did
-
-That's it — the entry is saved with the current time.
-
-## Iron Man reminder
-
-Every 30 minutes, a small transparent Iron Man window flies diagonally across your screen with a message like:
-
-> "Hey genius, where's your update?"
-
-- Click anywhere on him → he flies straight up and disappears
-- Ignore him → he flies off on his own after ~8 seconds
-- Want to test it? Click **Iron Man Reminder** in the tray menu
-
-You can change the interval by editing the ticker in `main.go`:
-
-```go
-ticker := time.NewTicker(30 * time.Minute)
-```
-
-## Excel format (built for analysis)
-
-Workbook: `~/.metracker/me_tracker.xlsx`
-
-Each sheet is named by date. Every entry has these columns:
-
-| Time     | Category     | Minutes | Hours | Activity              |
-|----------|--------------|---------|-------|-----------------------|
-| 14:32:10 | Development  | 45      | 0.75  | Built login API       |
-| 15:10:05 | Meetings     | 30      | 0.50  | Daily standup         |
-
-### Why these columns?
-
-- **Category** — lets you group work by role/type (Development, Meetings, Learning, etc.)
-- **Minutes** — easy raw duration
-- **Hours** — pre-calculated for charts and pivot tables
-
-You can edit categories in `~/.metracker/categories.json` and restart the app.
-
-## Analysis ideas in Excel
-
-Use Excel's built-in features on your workbook:
-
-1. **Total hours per day**
-   - Select any sheet → `Insert → PivotTable`
-   - Rows: `Date` (sheet name), Values: `Sum of Hours`
-
-2. **Time spent per category**
-   - Combine all sheets, or analyze per sheet
-   - PivotTable: Rows = `Category`, Values = `Sum of Hours`
-
-3. **Which role to focus on?**
-   - Over a week/month, compare category totals
-   - High `Meetings` vs low `Development` might mean you should protect deep-work time
-   - High `Learning` could show you're growing toward a new skill/role
-
-4. **Weekly/monthly trends**
-   - Copy data from all sheets into one summary sheet
-   - Use `SUMIFS` or PivotTables by date range
-
-## Dependencies
-
-Build-time:
-
-- Go 1.21+ (module uses Go 1.25 toolchain automatically)
-- `libgtk-3-dev`
-- `libayatana-appindicator3-dev`
-
-Runtime:
-
-- GTK+3
-- Ayatana AppIndicator
-- `zenity` (for dialogs — usually pre-installed on Ubuntu)
-- OpenGL / X11 (for the Iron Man Ebiten overlay)
-
-Install build deps with:
+The launcher points to this checkout. Systemd manages automatic startup.
 
 ```bash
-sudo apt update
-sudo apt install -y libgtk-3-dev libayatana-appindicator3-dev
+systemctl --user status metracker
+systemctl --user stop metracker
+systemctl --user start metracker
+systemctl --user disable metracker
+journalctl --user -u metracker -f
 ```
+
+## Data and configuration
+
+All runtime data stays in `~/.metracker/`:
+
+| File | Purpose |
+| --- | --- |
+| `me_tracker.xlsx` | Existing workbook, one `YYYY-MM-DD` sheet per day |
+| `categories.json` | User-editable category list |
+| `add-entry.trigger` | Request sent by clicking the reminder |
+| `tracker.lock` | Kernel-backed instance lock; do not delete while running |
+
+Default categories are embedded from `internal/config/categories.json` and written only when the user's category file is missing. Edit `~/.metracker/categories.json` and restart to change the list. Invalid, empty, or unreadable settings produce a startup error in the logs and are preserved for correction.
+
+The reminder interval is defined by `config.ReminderInterval` in `internal/config/config.go`. It remains 30 minutes, measured from application startup. Changing it currently requires rebuilding and reinstalling.
+
+## Excel format
+
+| Time | Category | Minutes | Hours | Activity |
+| --- | --- | --- | --- | --- |
+| 14:32:10 | Development | 45 | 0.75 | Built login API |
+| 15:10:05 | Meetings | 30 | 0.50 | Daily standup |
+
+The timestamp and sheet date come from a single local-time timestamp. Existing entries and sheet names remain compatible. Missing headers from the old first-sheet behavior are restored when that sheet receives a new entry.
+
+Saves are serialized, written to a temporary file beside the workbook, synced, and then renamed over the destination. Failed saves before replacement leave the previous workbook intact. A damaged existing workbook produces an error instead of being overwritten. Temporary files are removed after handled failures; an abrupt process kill may leave a `.workbook-*.xlsx` file.
+
+Avoid saving external edits to the workbook while the tracker is writing: the tracker instance lock does not coordinate with Excel or LibreOffice. Use Excel pivot tables to analyze category totals on a daily sheet; combine daily sheets when comparing dates, since the date is currently the sheet name rather than a column.
+
+## Connect your personal Google Sheet
+
+1. Create a Google Cloud project and enable the **Google Sheets API**.
+2. Configure Google Auth Platform for a personal account with **External** audience. While testing, add your Google email as a test user.
+3. Create an OAuth client with application type **Desktop app**, then download its JSON file. Keep it on your computer; no Google password is needed.
+4. Build and stop the running tracker before setup:
+
+```bash
+make build
+systemctl --user stop metracker
+./metracker --setup-google \
+  --sheet "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit" \
+  --credentials "/path/to/downloaded-client.json" \
+  --tab "Activities"
+```
+
+Setup prints a Google authorization URL for you to open manually; it does not launch a browser. The app uses a temporary localhost callback, a random authorization state, and PKCE. Grant Sheets access using the account that can edit the destination. The requested `spreadsheets` scope permits spreadsheet access across that account; the app's sync code writes only to the configured spreadsheet and tab.
+
+Setup creates the Activities tab if missing, adds headers to an empty tab, and verifies existing headers before enabling sync. Use a dedicated tab with these columns:
+
+| Date | Time | Category | Minutes | Hours | Activity | Entry ID |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 | 14:32:10 | Development | 45 | 0.75 | Built login API | Generated stable ID |
+
+Restart the service after successful setup:
+
+```bash
+./install-service.sh
+journalctl --user -u metracker -f
+```
+
+Setup stores `google-sync.json`, `google-credentials.json`, and `google-token.json` in `~/.metracker/`. Credentials and tokens are saved with owner-only permissions and must not be committed or shared. Google authorization may need renewing if revoked or expired. In an External OAuth app left in Testing, refresh tokens for this scope expire after seven days ([Google token expiry rules](https://developers.google.com/identity/protocols/oauth2#expiration)); rerun setup, or configure the consent app for appropriate ongoing use.
+
+### Sync behavior and recovery
+
+- Every **new entry saved by this version** is committed together with a durable upload request in the hidden `_metracker_sync` worksheet. Existing historical entries are not automatically imported.
+- Google setup is optional. Entries logged before setup remain queued and sync once configured. A legacy workbook without a queue has no pending uploads.
+- Uploads run at startup, after each save, on **Sync Google Sheets Now**, and every minute when entries remain queued. Internet failures never block the native entry form.
+- Each entry receives a stable ID. Before upload, its destination and remote row are reserved in the workbook. Retries update that same row using RAW values, preventing a dropped response from causing a second append and keeping activity text from being interpreted as a formula.
+- Entries leave the queue only after upload succeeds or their ID is found in the destination. Sync errors are recorded in the service logs; the native window reports local saves separately from cloud status.
+- Keep the tab dedicated to this tracker. Do not delete/change Entry IDs, insert/delete/sort rows while sync is pending, or add other writers. Occupied reserved rows cause a safe error, leaving entries queued. Spreadsheet applications are not coordinated by the tracker lock.
+- Do not edit/delete the hidden `_metracker_sync` sheet. The visible daily sheets retain their original five-column format.
+- Editing existing Excel entries does not update their Google rows: this phase uploads newly logged entries, rather than providing two-way synchronization.
+- Entries already reserved for a destination cannot silently move to a different sheet. Restore the original settings to finish those uploads before changing destinations.
+- To pause cloud uploads, stop the tracker, rename `~/.metracker/google-sync.json`, and restart. Local entries continue to be queued; restoring the settings resumes uploads.
+
+Google documentation: [Desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app), [Sheets setup](https://developers.google.com/workspace/sheets/api/quickstart/go), and [cell updates](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets.values/update).
+
+## Possible next phase (not implemented)
+
+- Working hours and quiet hours for reminders.
+- Snooze/pause controls for focus sessions and meetings.
+- Daily and weekly summaries of time by category.
+- Correct or delete previous entries.
+- A database as the source of truth with Excel exports as the assistant grows.
 
 ## Uninstall
 
+Stop the service and remove program integration:
+
 ```bash
-systemctl --user stop metracker
-systemctl --user disable metracker
-rm -f ~/.config/systemd/user/metracker.service
-rm -f ~/.local/share/applications/metracker.desktop
-rm -f ~/.config/autostart/metracker.desktop
-rm -rf ~/.metracker
+systemctl --user disable --now metracker
+rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/metracker.service"
+rm -f "$HOME/.local/share/applications/metracker.desktop"
+rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/metracker.desktop"
 systemctl --user daemon-reload
 ```
+
+Keep `~/.metracker/` to preserve your tracked work. Delete that directory only if you intentionally want to erase the workbook and settings.
