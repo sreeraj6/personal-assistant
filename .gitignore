@@ -1,0 +1,35 @@
+# Binaries
+metracker
+ironman-reminder
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go build/test artifacts
+*.test
+*.out
+/vendor/
+
+# Local Go module cache
+.gopath/
+.gocache/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.backup
+*.backup.png
+
+# Tracker data
+.metracker/
+me_tracker.xlsx

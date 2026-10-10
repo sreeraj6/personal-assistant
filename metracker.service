@@ -1,0 +1,15 @@
+[Unit]
+Description=Me Tracker - daily activity logger
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.metracker/metracker
+Restart=on-failure
+RestartSec=5
+Environment="DISPLAY=:1"
+Environment="XAUTHORITY=/run/user/1000/gdm/Xauthority"
+
+[Install]
+WantedBy=default.target
